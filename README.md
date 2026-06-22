@@ -37,6 +37,7 @@ Fame is forever.
 - [Persistence & the permanent ledger](#persistence--the-permanent-ledger)
 - [Frontend & design language](#frontend--design-language)
 - [Monetization surfaces](#monetization-surfaces)
+- [Testing, CI & deployment](#testing-ci--deployment)
 - [Configuration](#configuration)
 - [Project layout](#project-layout)
 - [Design decisions & FAQ](#design-decisions--faq)
@@ -355,12 +356,47 @@ verify an account, sponsor a board, buy the analytics suite, boost visibility,
 and create custom boards. In this build, actions are **simulated** — no real
 charges — but the surfaces are wired and ready.
 
+## Testing, CI & deployment
+
+```bash
+npm test           # node's built-in test runner — no extra dependency
+```
+
+The suite (`test/*.test.js`) covers the scoring formulas (Attention,
+Reputation, Momentum, Excitement), crown-resolution logic in the Arena Engine
+(challenges, coups, defenses, authorization), the Live Commentary Engine
+(template selection, role-correct agent picking, real-data interpolation), and
+the accounts layer (signup validation, login, sessions) — the latter pointed at
+an in-memory SQLite database (`CROWN_DB_PATH=:memory:`) so tests never touch
+`data/crown.db`.
+
+A GitHub Actions workflow (`.github/workflows/ci.yml`) runs a syntax check and
+the full test suite on every push and pull request.
+
+**Docker:**
+
+```bash
+docker build -t the-crown .
+docker run -p 3000:3000 -v "$(pwd)/data:/app/data" the-crown
+```
+
+The image is `node:22-alpine` with no install step — zero runtime dependencies
+means there's nothing to `npm install`. Mount `./data` as a volume to persist
+the world snapshot, Hall of Fame ledger, and accounts database across
+container restarts.
+
+`GET /api/health` reports liveness, uptime, board count, and SQLite
+connectivity — point a load balancer or orchestrator's health check at it; it
+returns `503` if the accounts database is unreachable.
+
 ## Configuration
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP port |
 | `HOST` | `0.0.0.0` | Bind address |
+| `CROWN_DB_PATH` | `data/crown.db` | Accounts database path — tests set this to `:memory:` |
+| `NODE_ENV` | unset | Set to `production` to mark session cookies `Secure` |
 
 ## Project layout
 
@@ -385,6 +421,14 @@ public/
   app.js          SPA: hash router, SSE live updates, animated counters, modals, FX
 data/
   .gitkeep        Runtime persistence dir (world.json, halloffame.ndjson, crown.db are git-ignored)
+test/
+  scoring.test.js     Attention / Reputation / Momentum / Excitement formulas
+  engine.test.js      Crown challenge/defend/coup resolution and authorization
+  commentary.test.js  Commentary template selection, agent picking, interpolation
+  auth.test.js        Signup, login, and session lifecycle (in-memory DB)
+.github/workflows/
+  ci.yml          Syntax check + test suite on every push/PR
+Dockerfile        node:22-alpine image, no install step needed
 ```
 
 ## Design decisions & FAQ

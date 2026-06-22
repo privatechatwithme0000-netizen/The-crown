@@ -22,6 +22,7 @@ import {
   createUser, verifyUser, createSession, resolveSession, destroySession, SESSION_TTL_MS,
 } from './auth.js';
 import { rateLimit } from './ratelimit.js';
+import db from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -116,7 +117,10 @@ async function handleApi(req, res, url) {
   const parts = url.pathname.split('/').filter(Boolean); // ['api', ...]
   const [, resource, id, action] = parts;
 
-  if (resource === 'health') return sendJson(res, 200, { ok: true, uptime: Date.now() - world.startedAt });
+  if (resource === 'health') {
+    const health = healthCheck();
+    return sendJson(res, health.ok ? 200 : 503, health);
+  }
 
   if (resource === 'auth') return handleAuth(req, res, id);
 
@@ -201,6 +205,21 @@ async function handleApi(req, res, url) {
   }
 
   return sendJson(res, 404, { error: 'Unknown endpoint' });
+}
+
+function healthCheck() {
+  let dbOk = true;
+  try {
+    db.prepare('SELECT 1').get();
+  } catch {
+    dbOk = false;
+  }
+  return {
+    ok: dbOk,
+    uptime: Date.now() - world.startedAt,
+    boards: Object.keys(world.boards).length,
+    db: dbOk ? 'ok' : 'unreachable',
+  };
 }
 
 // ---- Auth ------------------------------------------------------------

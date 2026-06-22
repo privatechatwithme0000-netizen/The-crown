@@ -9,9 +9,12 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '..', 'data');
-if (!fsSync.existsSync(DATA_DIR)) fsSync.mkdirSync(DATA_DIR, { recursive: true });
 
-const db = new DatabaseSync(path.join(DATA_DIR, 'crown.db'));
+// Tests point this at ':memory:' so they never touch the real arena DB.
+const DB_PATH = process.env.CROWN_DB_PATH || path.join(DATA_DIR, 'crown.db');
+if (DB_PATH !== ':memory:' && !fsSync.existsSync(DATA_DIR)) fsSync.mkdirSync(DATA_DIR, { recursive: true });
+
+const db = new DatabaseSync(DB_PATH);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (

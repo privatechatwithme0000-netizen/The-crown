@@ -10,7 +10,8 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "reset": "node server/cli.js reset"
+    "reset": "node server/cli.js reset",
+    "test": "node --test"
   },
   "keywords": [
     "arena",
