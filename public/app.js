@@ -67,13 +67,22 @@ const api = {
   halloffame: () => fetch('/api/halloffame').then((r) => r.json()),
   challenge: (slug, body) => fetch(`/api/boards/${slug}/challenge`, post(body)).then((r) => r.json()),
   defend: (slug, body) => fetch(`/api/boards/${slug}/defend`, post(body)).then((r) => r.json()),
+  me: () => fetch('/api/auth/me').then((r) => r.json()),
+  signup: (body) => fetch('/api/auth/signup', post(body)).then((r) => r.json()),
+  login: (body) => fetch('/api/auth/login', post(body)).then((r) => r.json()),
+  logout: () => fetch('/api/auth/logout', post({})).then((r) => r.json()),
 };
 const post = (body) => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 // ---------------------------------------------------------------- identity
 const Identity = {
-  get name() { return localStorage.getItem('crown_handle') || ''; },
-  set name(v) { localStorage.setItem('crown_handle', v); this.render(); },
+  user: null,
+  get name() { return this.user ? this.user.username : ''; },
+  async refresh() {
+    try { const r = await api.me(); this.user = r.user || null; } catch { this.user = null; }
+    this.render();
+    return this.user;
+  },
   initials(n) {
     if (!n) return '?';
     const p = n.trim().split(/\s+/);
@@ -285,7 +294,7 @@ async function renderBoard(slug) {
   const b = await api.board(slug);
   if (b.error) { view.innerHTML = `<div class="empty"><div class="ico">♔</div>${esc(b.error)}</div>`; return; }
 
-  const holderIsMe = Identity.name && Identity.name === b.crown.holder.name;
+  const holderIsMe = Boolean(Identity.name) && Identity.name === b.crown.holder.name;
   const rep = b.crown.holder.reputation;
 
   view.style.setProperty('--accent', b.accent);
@@ -597,30 +606,95 @@ function closeModal() { const r = $('#modalRoot'); r.hidden = true; r.innerHTML 
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
 function openIdentity() {
-  const modal = modalShell(`
-    <h2 class="modal__title">Enter the Arena</h2>
-    <p class="modal__sub">Choose the name that will be remembered. This is how you'll appear when you claim a Crown.</p>
+  if (Identity.user) {
+    const modal = modalShell(`
+      <h2 class="modal__title">Your Arena Identity</h2>
+      <p class="modal__sub">Signed in as <b>${esc(Identity.user.username)}</b>. This is the name recorded when you claim a Crown.</p>
+      <button class="btn btn--ghost btn--block" id="idLogout">Sign Out</button>`);
+    $('#idLogout', modal).addEventListener('click', async () => {
+      await api.logout();
+      Identity.user = null; Identity.render();
+      closeModal();
+      toast('', '👋 Signed Out', 'Come back anytime to defend your crowns.');
+      if (live.route === 'board') renderBoard(live.slug);
+    });
+    return;
+  }
+
+  let mode = 'login';
+  const modal = modalShell(idFormHTML(mode));
+  wireIdForm(modal, mode);
+}
+
+function idFormHTML(mode) {
+  const isLogin = mode === 'login';
+  return `
+    <h2 class="modal__title">${isLogin ? 'Sign In' : 'Enter the Arena'}</h2>
+    <p class="modal__sub">${isLogin
+      ? 'Sign in to challenge and defend crowns.'
+      : 'Choose the handle that will be remembered. This is how you appear when you claim a Crown.'}</p>
     <div class="field">
-      <label>Your Arena Handle</label>
-      <input class="input" id="idInput" maxlength="24" placeholder="e.g. Augustus, Nova Group, KingMidas" value="${esc(Identity.name)}" />
+      <label>Arena Handle</label>
+      <input class="input" id="idUser" maxlength="20" placeholder="letters, numbers, underscore" />
     </div>
-    <button class="btn btn--gold btn--block" id="idSave">Save Identity</button>`);
-  const input = $('#idInput', modal);
-  input.focus();
-  const save = () => {
-    const v = input.value.trim();
-    if (!v) { input.focus(); return; }
-    Identity.name = v;
+    <div class="field">
+      <label>Password</label>
+      <input class="input" id="idPass" type="password" maxlength="100" placeholder="${isLogin ? 'Your password' : 'At least 8 characters'}" />
+    </div>
+    <button class="btn btn--gold btn--block" id="idSubmit">${isLogin ? 'Sign In' : 'Create Identity'}</button>
+    <p class="hint" style="text-align:center;margin-top:12px">
+      ${isLogin ? "New to the arena?" : 'Already have a handle?'}
+      <a href="#" id="idSwitch">${isLogin ? 'Create an identity' : 'Sign in'}</a>
+    </p>`;
+}
+
+function wireIdForm(modal, mode) {
+  const userI = $('#idUser', modal);
+  const passI = $('#idPass', modal);
+  userI.focus();
+
+  const submit = async () => {
+    const username = userI.value.trim();
+    const password = passI.value;
+    if (!username || !password) { (username ? passI : userI).focus(); return; }
+    const btn = $('#idSubmit', modal);
+    btn.disabled = true; btn.textContent = 'Working…';
+    const res = mode === 'login' ? await api.login({ username, password }) : await api.signup({ username, password });
+    if (res.error) {
+      toast('err', mode === 'login' ? 'Sign in failed' : 'Could not create identity', esc(res.error));
+      btn.disabled = false; btn.textContent = mode === 'login' ? 'Sign In' : 'Create Identity';
+      return;
+    }
+    Identity.user = res.user; Identity.render();
     closeModal();
-    toast('win', '♔ Welcome to the Arena', `You are <b>${esc(v)}</b>. Now go claim a Crown.`);
+    toast('win', '♔ Welcome to the Arena', `You are <b>${esc(res.user.username)}</b>. Now go claim a Crown.`);
+    if (live.route === 'board') renderBoard(live.slug);
   };
-  $('#idSave', modal).addEventListener('click', save);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); });
+  $('#idSubmit', modal).addEventListener('click', submit);
+  passI.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+
+  $('#idSwitch', modal).addEventListener('click', (e) => {
+    e.preventDefault();
+    mode = mode === 'login' ? 'signup' : 'login';
+    modal.innerHTML = `<button class="modal__close" aria-label="Close">✕</button>${idFormHTML(mode)}`;
+    $('.modal__close', modal).addEventListener('click', closeModal);
+    wireIdForm(modal, mode);
+  });
 }
 
 async function openChallenge(slug, holderMode) {
   const b = await api.board(slug);
   if (b.error) return;
+
+  if (!Identity.user) {
+    const modal = modalShell(`
+      <h2 class="modal__title">Sign In to Compete</h2>
+      <p class="modal__sub">You need an arena identity to challenge or defend the <b>${esc(b.name)}</b> Crown.</p>
+      <button class="btn btn--gold btn--block" id="chSignIn">Sign In / Create Identity</button>`);
+    $('#chSignIn', modal).addEventListener('click', () => { closeModal(); openIdentity(); });
+    return;
+  }
+
   const isHolder = holderMode || (Identity.name && Identity.name === b.crown.holder.name);
   const value = b.crown.value;
   const coup = Math.ceil(value * 1.75);
@@ -632,8 +706,8 @@ async function openChallenge(slug, holderMode) {
       ? 'Reinforce your reign and reset the 48-hour timer. Your reinforcement adds to the Crown value.'
       : `Current Crown value is <b>${usd(value)}</b>, held by <b>${esc(b.crown.holder.name)}</b>. Outbid to lead — or hit <b>${usd(coup)}</b> for an instant coup.`}</p>
     <div class="field">
-      <label>Your Handle</label>
-      <input class="input" id="chName" maxlength="24" value="${esc(Identity.name)}" placeholder="Your arena name" />
+      <label>Bidding As</label>
+      <div class="hint">${esc(Identity.name)}</div>
     </div>
     <div class="field">
       <label>${isHolder ? 'Reinforcement (USD)' : 'Your Bid (USD)'}</label>
@@ -647,9 +721,8 @@ async function openChallenge(slug, holderMode) {
     </div>
     <button class="btn btn--gold btn--block" id="chSubmit">${isHolder ? '🛡 Defend Crown' : '♔ Launch Challenge'}</button>`);
 
-  const nameI = $('#chName', modal);
   const amtI = $('#chAmount', modal);
-  if (!Identity.name) nameI.focus(); else amtI.focus();
+  amtI.focus();
 
   $$('.quick-bids button', modal).forEach((btn) =>
     btn.addEventListener('click', () => { amtI.value = btn.dataset.amt; updateHint(); }));
@@ -665,19 +738,16 @@ async function openChallenge(slug, holderMode) {
   amtI.addEventListener('input', updateHint);
 
   $('#chSubmit', modal).addEventListener('click', async () => {
-    const name = nameI.value.trim();
     const amount = Number(amtI.value);
-    if (!name) { nameI.focus(); return; }
     if (!Number.isFinite(amount) || amount <= 0) { amtI.focus(); return; }
-    if (Identity.name !== name) Identity.name = name;
 
     const btn = $('#chSubmit', modal);
     btn.disabled = true; btn.textContent = 'Sending to the arena…';
-    const res = isHolder ? await api.defend(slug, { name, amount }) : await api.challenge(slug, { name, amount });
+    const res = isHolder ? await api.defend(slug, { amount }) : await api.challenge(slug, { amount });
 
     if (res.error) { toast('err', 'Challenge rejected', esc(res.error)); btn.disabled = false; btn.textContent = '♔ Launch Challenge'; return; }
     closeModal();
-    handleActionResult(res, b, name);
+    handleActionResult(res, b, Identity.name);
   });
 }
 
@@ -969,10 +1039,11 @@ function loadingHTML() { return `<div class="loading"><div class="spinner"></div
 
 // ============================================================ BOOT
 
-function boot() {
-  Identity.render();
+async function boot() {
   $('#identityBtn').addEventListener('click', openIdentity);
   $('#pricingBtn').addEventListener('click', openPricing);
+
+  await Identity.refresh();
 
   // Seed the ticker from the first home payload.
   api.home().then((d) => { seedTicker(d.ticker); updateGlobalStats(d.stats); }).catch(() => seedTicker([]));

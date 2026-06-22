@@ -76,7 +76,8 @@ browse. There is only the arena, the crown, the clock, and the record.
 
 ## Quick start
 
-**Zero dependencies.** Node.js 20+ only — it uses nothing but built-ins.
+**Zero dependencies.** Node.js 22.5+ only — it uses nothing but built-ins
+(accounts use the built-in `node:sqlite`, available unflagged since 22.5).
 
 ```bash
 npm start          # serve the arena at http://localhost:3000
@@ -90,8 +91,8 @@ anything.
 
 ## A 60-second tour
 
-1. **Sign in.** Click *Sign In* (top right) and pick an arena handle — the name
-   that will be remembered when you claim a Crown.
+1. **Sign in.** Click *Sign In* (top right) and create an arena identity with a
+   handle and password — the name that will be remembered when you claim a Crown.
 2. **Pick a fight.** On the homepage, *Live Crown Battles* shows boards whose
    timers are near zero. *Trending* ranks boards by live Attention Score.
 3. **Open a board.** You'll see the reigning Crown Holder, the live crown value,
@@ -252,8 +253,22 @@ modern Node does, with nothing to install.
   and a **Server-Sent Events** stream. The simulation lives in the Arena Engine.
 - **Frontend:** a dependency-free single-page app (hash routing) styled as a
   dark-luxury terminal, updating live from the SSE stream.
+- **Accounts:** real signups backed by `node:sqlite` (built into Node, no driver
+  to install) — scrypt-hashed passwords, httpOnly session cookies.
 - **Persistence:** a debounced JSON world snapshot plus an append-only NDJSON
-  Hall of Fame ledger.
+  Hall of Fame ledger for the simulation; SQLite for user identity.
+
+## Accounts & security
+
+Claiming or defending a Crown requires a real account — there is no client-side
+"type any name" identity. Signup/login issue a random 256-bit session token in
+an `HttpOnly; SameSite=Lax` cookie; the server resolves the acting identity from
+that cookie, never from a request body field. This closes a class of bug where
+anyone could submit `{"name":"<current holder>"}` to impersonate a holder —
+challenge/defend now always act as the signed-in user. Passwords are hashed with
+`scrypt` (Node's built-in, tunable, memory-hard KDF) with a random per-user salt;
+comparisons use `crypto.timingSafeEqual`. Signup, login, challenge, and defend
+are all rate-limited per IP / per user.
 
 ## HTTP API
 
@@ -262,21 +277,27 @@ modern Node does, with nothing to install.
 | `GET /api/home` | Homepage aggregates: trending, live battles, most watched, highest momentum, recent transfers, top holders, top agents, highlights, ticker, global stats |
 | `GET /api/boards` | All boards (ranked by leaderboard position) |
 | `GET /api/boards/:slug` | Full board state including comments, bids, history, Hall of Fame |
-| `POST /api/boards/:slug/challenge` | `{ name, amount }` → outcome `coup` / `leading` / `placed` |
-| `POST /api/boards/:slug/defend` | `{ name, amount }` → holder reinforces (resets timer) |
+| `POST /api/boards/:slug/challenge` | *(auth required)* `{ amount }` → outcome `coup` / `leading` / `placed` |
+| `POST /api/boards/:slug/defend` | *(auth required, holder only)* `{ amount }` → reinforces and resets timer |
 | `POST /api/boards/:slug/cheer` | Community nudge |
 | `GET /api/agents` · `GET /api/agents/:id` | Agent roster / one agent with recent calls |
 | `GET /api/holders` | Global holder leaderboard |
 | `GET /api/halloffame` | Aggregated Hall of Fame entries + ledger tail |
+| `POST /api/auth/signup` | `{ username, password }` → creates an account + session cookie |
+| `POST /api/auth/login` | `{ username, password }` → session cookie |
+| `POST /api/auth/logout` | Clears the session |
+| `GET /api/auth/me` | `{ user }` for the current session, or `{ user: null }` |
 | `GET /api/stream` | Server-Sent Events live stream |
 | `GET /api/health` | Liveness + uptime |
 
-Example — stage a coup on the Tesla board:
+Example — sign up, then stage a coup on the Tesla board:
 
 ```bash
-curl -X POST http://localhost:3000/api/boards/tesla/challenge \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Augustus","amount":99999}'
+curl -c cookies.txt -X POST http://localhost:3000/api/auth/signup \
+  -H 'Content-Type: application/json' -d '{"username":"Augustus","password":"a-strong-password"}'
+
+curl -b cookies.txt -X POST http://localhost:3000/api/boards/tesla/challenge \
+  -H 'Content-Type: application/json' -d '{"amount":99999}'
 # → {"outcome":"coup","board":{...},"coupThreshold":...}
 ```
 
@@ -354,20 +375,24 @@ server/
   boards.js       Board definitions (the famous entities)
   views.js        Wire serializers shared by the API and the engine broadcasts
   store.js        JSON snapshot + append-only Hall of Fame ledger
+  db.js           node:sqlite database handle + schema (users, sessions)
+  auth.js         Signup/login, scrypt password hashing, session issuance/resolution
+  ratelimit.js    In-memory fixed-window rate limiter for auth + crown actions
   cli.js          Maintenance CLI (reset)
 public/
   index.html      App shell: top bar, ticker, routed view, modals, toasts
   styles.css      Premium dark-luxury arena theme
   app.js          SPA: hash router, SSE live updates, animated counters, modals, FX
 data/
-  .gitkeep        Runtime persistence dir (world.json + halloffame.ndjson are git-ignored)
+  .gitkeep        Runtime persistence dir (world.json, halloffame.ndjson, crown.db are git-ignored)
 ```
 
 ## Design decisions & FAQ
 
 **Why zero dependencies?** Resilience and portability. The whole arena — server,
-real-time transport, persistence, and a rich UI — runs on a stock Node install
-with nothing to download, build, or break.
+real-time transport, persistence, accounts, and a rich UI — runs on a stock Node
+install with nothing to download, build, or break. Accounts use `node:sqlite`
+(built into Node 22+) rather than an external database driver for the same reason.
 
 **Why Server-Sent Events instead of WebSockets?** The arena is overwhelmingly
 server→client (commentary, counters, transfers); user actions are infrequent and

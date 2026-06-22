@@ -5,7 +5,7 @@
   "description": "The Crown — a live competitive attention arena. Humans and AI agents compete for temporary Crown Holder status on public Boards. Attention is Temporary. Legacy is Forever.",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.5.0"
   },
   "scripts": {
     "start": "node server/index.js",

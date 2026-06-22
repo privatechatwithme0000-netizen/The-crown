@@ -18,6 +18,10 @@ import {
 import {
   homeSummary, boardCard, boardFull, agentView, holderView,
 } from './views.js';
+import {
+  createUser, verifyUser, createSession, resolveSession, destroySession, SESSION_TTL_MS,
+} from './auth.js';
+import { rateLimit } from './ratelimit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -70,6 +74,8 @@ startEngine();
 
 // ---- Tiny router ---------------------------------------------------------
 
+const SESSION_COOKIE = 'crown_session';
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const { pathname } = url;
@@ -112,6 +118,8 @@ async function handleApi(req, res, url) {
 
   if (resource === 'health') return sendJson(res, 200, { ok: true, uptime: Date.now() - world.startedAt });
 
+  if (resource === 'auth') return handleAuth(req, res, id);
+
   if (resource === 'home' && req.method === 'GET') {
     return sendJson(res, 200, homeSummary(world));
   }
@@ -131,13 +139,23 @@ async function handleApi(req, res, url) {
       return sendJson(res, 200, boardFull(board));
     }
     if (action === 'challenge' && req.method === 'POST') {
+      const user = getSessionUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Sign in to challenge a Crown' });
+      if (!rateLimit(`act:${user.id}`, { limit: 12, windowMs: 60000 })) {
+        return sendJson(res, 429, { error: 'Too many actions — slow down.' });
+      }
       const body = await readBody(req);
-      const result = challenge(id, body);
+      const result = challenge(id, { name: user.username, amount: body.amount, type: 'human' });
       return sendJson(res, result.error ? (result.status || 400) : 200, result);
     }
     if (action === 'defend' && req.method === 'POST') {
+      const user = getSessionUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Sign in to defend a Crown' });
+      if (!rateLimit(`act:${user.id}`, { limit: 12, windowMs: 60000 })) {
+        return sendJson(res, 429, { error: 'Too many actions — slow down.' });
+      }
       const body = await readBody(req);
-      const result = defend(id, body);
+      const result = defend(id, { name: user.username, amount: body.amount });
       return sendJson(res, result.error ? (result.status || 400) : 200, result);
     }
     if (action === 'cheer' && req.method === 'POST') {
@@ -183,6 +201,89 @@ async function handleApi(req, res, url) {
   }
 
   return sendJson(res, 404, { error: 'Unknown endpoint' });
+}
+
+// ---- Auth ------------------------------------------------------------
+
+async function handleAuth(req, res, action) {
+  const ip = req.socket.remoteAddress || 'unknown';
+
+  if (action === 'signup' && req.method === 'POST') {
+    if (!rateLimit(`auth:${ip}`, { limit: 10, windowMs: 60000 })) {
+      return sendJson(res, 429, { error: 'Too many attempts — try again shortly.' });
+    }
+    const body = await readBody(req);
+    try {
+      const user = createUser(body.username, body.password);
+      const token = createSession(user.id);
+      setSessionCookie(res, token, req);
+      return sendJson(res, 200, { user: { username: user.username } });
+    } catch (err) {
+      return sendJson(res, err.status || 500, { error: err.message || 'Signup failed' });
+    }
+  }
+
+  if (action === 'login' && req.method === 'POST') {
+    if (!rateLimit(`auth:${ip}`, { limit: 10, windowMs: 60000 })) {
+      return sendJson(res, 429, { error: 'Too many attempts — try again shortly.' });
+    }
+    const body = await readBody(req);
+    const user = verifyUser(body.username, body.password);
+    if (!user) return sendJson(res, 401, { error: 'Wrong handle or password' });
+    const token = createSession(user.id);
+    setSessionCookie(res, token, req);
+    return sendJson(res, 200, { user: { username: user.username } });
+  }
+
+  if (action === 'logout' && req.method === 'POST') {
+    const token = getCookie(req, SESSION_COOKIE);
+    destroySession(token);
+    clearSessionCookie(res, req);
+    return sendJson(res, 200, { ok: true });
+  }
+
+  if (action === 'me' && req.method === 'GET') {
+    const user = getSessionUser(req);
+    return sendJson(res, 200, { user: user ? { username: user.username } : null });
+  }
+
+  return sendJson(res, 404, { error: 'Unknown auth endpoint' });
+}
+
+function getSessionUser(req) {
+  const token = getCookie(req, SESSION_COOKIE);
+  return resolveSession(token);
+}
+
+function parseCookies(req) {
+  const header = req.headers.cookie;
+  const out = {};
+  if (!header) return out;
+  for (const part of header.split(';')) {
+    const i = part.indexOf('=');
+    if (i === -1) continue;
+    out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return out;
+}
+
+function getCookie(req, name) {
+  return parseCookies(req)[name];
+}
+
+function isSecureRequest(req) {
+  return req.headers['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production';
+}
+
+function setSessionCookie(res, token, req) {
+  const maxAgeSec = Math.floor(SESSION_TTL_MS / 1000);
+  const secure = isSecureRequest(req) ? ' Secure;' : '';
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSec};${secure}`);
+}
+
+function clearSessionCookie(res, req) {
+  const secure = isSecureRequest(req) ? ' Secure;' : '';
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0;${secure}`);
 }
 
 // ---- Static files --------------------------------------------------------
