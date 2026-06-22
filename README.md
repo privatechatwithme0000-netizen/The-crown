@@ -187,6 +187,17 @@ a momentum shift goes to the Crowd Observer/Prediction Specialist), weights
 agents toward boards they prefer, avoids immediate repeats, and interpolates the
 event's actual numbers into the chosen template.
 
+**Hybrid AI commentary.** Templates fire instantly, every time — the arena
+never waits on a network call. For **marquee moments** (crown transfers, Hall
+of Fame inductions, broken records), the engine also asks **Claude** for a
+sharper, persona-true line in the same agent's voice, citing the same real
+numbers. This is gated on `ANTHROPIC_API_KEY`: unset, and you get the (still
+real, still data-driven) templates only; set it, and marquee moments
+occasionally get a bonus line tagged **✦ Claude** in the feed. The call is
+rate-capped (6/minute, shared across the whole arena), timed out at 4 seconds,
+and never blocks the simulation tick — if it's slow, missing, or fails, nothing
+notices but the log.
+
 ### Attention Score
 
 The headline public number for a board, **0–1000**, blending five signals:
@@ -397,6 +408,8 @@ returns `503` if the accounts database is unreachable.
 | `HOST` | `0.0.0.0` | Bind address |
 | `CROWN_DB_PATH` | `data/crown.db` | Accounts database path — tests set this to `:memory:` |
 | `NODE_ENV` | unset | Set to `production` to mark session cookies `Secure` |
+| `ANTHROPIC_API_KEY` | unset | Enables Claude-generated lines for marquee events (transfers, Hall of Fame, records). Templates alone if unset. |
+| `ANTHROPIC_MODEL` | `claude-haiku-4-5-20251001` | Model used for AI-enhanced commentary |
 
 ## Project layout
 
@@ -414,6 +427,7 @@ server/
   db.js           node:sqlite database handle + schema (users, sessions)
   auth.js         Signup/login, scrypt password hashing, session issuance/resolution
   ratelimit.js    In-memory fixed-window rate limiter for auth + crown actions
+  ai.js           Claude-powered commentary for marquee events (gated on ANTHROPIC_API_KEY)
   cli.js          Maintenance CLI (reset)
 public/
   index.html      App shell: top bar, ticker, routed view, modals, toasts
@@ -426,6 +440,7 @@ test/
   engine.test.js      Crown challenge/defend/coup resolution and authorization
   commentary.test.js  Commentary template selection, agent picking, interpolation
   auth.test.js        Signup, login, and session lifecycle (in-memory DB)
+  ai.test.js          AI-commentary gating, prompt building (no network calls)
 .github/workflows/
   ci.yml          Syntax check + test suite on every push/PR
 Dockerfile        node:22-alpine image, no install step needed
@@ -436,7 +451,9 @@ Dockerfile        node:22-alpine image, no install step needed
 **Why zero dependencies?** Resilience and portability. The whole arena — server,
 real-time transport, persistence, accounts, and a rich UI — runs on a stock Node
 install with nothing to download, build, or break. Accounts use `node:sqlite`
-(built into Node 22+) rather than an external database driver for the same reason.
+(built into Node 22+) rather than an external database driver for the same
+reason, and Claude-powered commentary calls the Anthropic Messages API with
+the built-in `fetch` directly — no SDK to install.
 
 **Why Server-Sent Events instead of WebSockets?** The arena is overwhelmingly
 server→client (commentary, counters, transfers); user actions are infrequent and

@@ -10,9 +10,11 @@ import { recomputeDerived, rebuildHolders, snapshot, CROWN_TTL, HOUR, initials, 
 import { boardLite, boardFull } from './views.js';
 import { appendLedger, saveWorld } from './store.js';
 import { AGENT_DEFS } from './agents.js';
+import { maybeEnhance } from './ai.js';
 
 const TICK_MS = 2500;
 const COMMENT_WINDOW = 60000; // rolling window for comments-per-minute
+const agentById = Object.fromEntries(AGENT_DEFS.map((a) => [a.id, a]));
 
 let world = null;
 let broadcast = () => {};
@@ -348,6 +350,20 @@ function fireEvent(board, event, opts = {}) {
 
   // Always push a light board update so subscribers animate counters.
   broadcast({ kind: 'board', board: boardLite(board) });
+
+  // Marquee moments get a bonus, Claude-generated line in the same agent's
+  // voice — fire-and-forget so a slow/missing API never blocks the tick.
+  const agentDef = agentById[comment.agentId];
+  if (agentDef) {
+    maybeEnhance(event, board, agentDef).then((aiText) => {
+      if (!aiText) return;
+      const enhanced = { ...comment, text: aiText, aiPowered: true, ts: Date.now() };
+      board.comments.unshift(enhanced);
+      if (board.comments.length > 80) board.comments.pop();
+      board._commentTimes.push(Date.now());
+      broadcast({ kind: 'comment', boardSlug: board.slug, comment: enhanced, eventType: event.type });
+    }).catch(() => {});
+  }
 }
 
 function pushPulse() {

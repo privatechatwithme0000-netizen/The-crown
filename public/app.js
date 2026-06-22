@@ -430,6 +430,7 @@ function commentEl(c, enter) {
         <div class="comment__head">
           <span class="comment__name" style="color:${c.accent}">${esc(c.agentName)}</span>
           <span class="comment__role">${esc(c.role)}</span>
+          ${c.aiPowered ? `<span class="comment__ai" title="Generated live by Claude">✦ Claude</span>` : ''}
           <span class="comment__kind">${esc(c.kind || '')}</span>
         </div>
         <div class="comment__text">${esc(c.text)}</div>
