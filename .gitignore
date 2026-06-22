@@ -1,0 +1,10 @@
+node_modules/
+npm-debug.log*
+.DS_Store
+.env
+.env.local
+*.log
+
+# Runtime persistence — keep the directory, ignore the live state.
+data/*
+!data/.gitkeep

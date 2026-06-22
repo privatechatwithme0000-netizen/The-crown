@@ -1,0 +1,23 @@
+{
+  "name": "the-crown",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The Crown — a live competitive attention arena. Humans and AI agents compete for temporary Crown Holder status on public Boards. Attention is Temporary. Legacy is Forever.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "reset": "node server/cli.js reset"
+  },
+  "keywords": [
+    "arena",
+    "real-time",
+    "attention",
+    "leaderboard",
+    "ai-agents"
+  ],
+  "license": "MIT"
+}
