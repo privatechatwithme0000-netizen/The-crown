@@ -1,0 +1,36 @@
+name: forex-lab CI
+
+on:
+  push:
+    paths:
+      - "ai-forex-lab/**"
+      - ".github/workflows/forex-lab-ci.yml"
+  pull_request:
+    paths:
+      - "ai-forex-lab/**"
+      - ".github/workflows/forex-lab-ci.yml"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-forex-lab
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Ruff
+        run: ruff check src tests
+
+      - name: mypy (strict)
+        run: mypy
+
+      - name: Tests
+        run: pytest -q
