@@ -8,7 +8,7 @@ open/close is stored explicitly for the execution and risk layers.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from .enums import Timeframe
@@ -18,7 +18,7 @@ from .money import dec
 def _ensure_utc(ts: datetime) -> datetime:
     if ts.tzinfo is None:
         raise ValueError("candle timestamp must be timezone-aware (UTC)")
-    return ts.astimezone(timezone.utc)
+    return ts.astimezone(UTC)
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,7 +8,7 @@ metrics, and audit events. Every result row carries full provenance
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +24,7 @@ from .engine import Backtester, BacktestOutcome
 
 
 def _now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 def db_candle_to_domain(row: models.Candle) -> Candle:
@@ -51,9 +51,7 @@ async def ensure_strategy_version(
     """Get-or-create the Strategy and StrategyVersion rows for pinning."""
     fp = strategy.version_fingerprint()
     strat = (
-        await session.execute(
-            select(models.Strategy).where(models.Strategy.key == strategy.key)
-        )
+        await session.execute(select(models.Strategy).where(models.Strategy.key == strategy.key))
     ).scalar_one_or_none()
     if strat is None:
         strat = models.Strategy(
@@ -86,12 +84,16 @@ async def ensure_strategy_version(
 
 async def load_domain_candles(session: AsyncSession, dataset_id: int) -> list[Candle]:
     rows = (
-        await session.execute(
-            select(models.Candle)
-            .where(models.Candle.dataset_id == dataset_id)
-            .order_by(models.Candle.timestamp)
+        (
+            await session.execute(
+                select(models.Candle)
+                .where(models.Candle.dataset_id == dataset_id)
+                .order_by(models.Candle.timestamp)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [db_candle_to_domain(r) for r in rows]
 
 
@@ -127,7 +129,7 @@ async def run_and_persist(
         await _persist_outcome(session, run, version.id, dataset_id, config, outcome, metrics)
         run.status = "COMPLETED"
         run.finished_at = _now()
-    except Exception as exc:  # noqa: BLE001 - record failure, re-raise
+    except Exception as exc:
         run.status = "FAILED"
         run.finished_at = _now()
         run.error = str(exc)
@@ -281,7 +283,5 @@ async def _persist_outcome(
         )
     )
     session.add(
-        models.MetricsReport(
-            run_id=run.id, split_kind="FULL", metrics=metrics, created_at=_now()
-        )
+        models.MetricsReport(run_id=run.id, split_kind="FULL", metrics=metrics, created_at=_now())
     )

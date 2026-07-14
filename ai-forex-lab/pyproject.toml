@@ -47,7 +47,11 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "SIM", "C4", "RUF"]
-ignore = ["B008"]  # FastAPI Depends() in defaults is idiomatic
+ignore = [
+    "B008",    # FastAPI Depends() in default args is idiomatic
+    "RUF009",  # Decimal defaults call dec(); Decimal is immutable so this is safe
+    "UP042",   # str+Enum is deliberate for JSON/pydantic value serialization
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["forex_lab"]

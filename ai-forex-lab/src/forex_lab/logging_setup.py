@@ -11,7 +11,7 @@ import json
 import logging
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 _SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -40,16 +40,14 @@ class _RedactionFilter(logging.Filter):
         if isinstance(record.msg, str):
             record.msg = redact(record.msg)
         if record.args:
-            record.args = tuple(
-                redact(a) if isinstance(a, str) else a for a in record.args
-            )
+            record.args = tuple(redact(a) if isinstance(a, str) else a for a in record.args)
         return True
 
 
 class _JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
-            "ts": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "ts": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -73,7 +71,5 @@ def configure_logging(level: str = "INFO", json_output: bool = True) -> None:
     if json_output:
         handler.setFormatter(_JsonFormatter())
     else:
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
-        )
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s"))
     root.addHandler(handler)

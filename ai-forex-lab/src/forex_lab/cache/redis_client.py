@@ -23,9 +23,7 @@ def get_redis(settings: Settings | None = None) -> aioredis.Redis:
     global _client
     if _client is None:
         settings = settings or get_settings()
-        _client = aioredis.from_url(
-            settings.redis_dsn, encoding="utf-8", decode_responses=True
-        )
+        _client = aioredis.from_url(settings.redis_dsn, encoding="utf-8", decode_responses=True)
     return _client
 
 
@@ -39,7 +37,7 @@ async def close_redis() -> None:
 async def ping() -> bool:
     try:
         return bool(await get_redis().ping())
-    except Exception:  # noqa: BLE001 - readiness probe must not raise
+    except Exception:
         return False
 
 

@@ -8,6 +8,7 @@ hardcoded value.
 
 from __future__ import annotations
 
+import itertools
 import math
 from dataclasses import dataclass
 from decimal import Decimal
@@ -161,9 +162,7 @@ def _streaks(trades: list[ClosedTrade]) -> tuple[int, int, Decimal]:
             cur_wins = cur_losses = 0
     if cur_losses > 0:
         loss_streaks.append(cur_losses)
-    avg_loss_streak = (
-        dec(sum(loss_streaks)) / dec(len(loss_streaks)) if loss_streaks else dec(0)
-    )
+    avg_loss_streak = dec(sum(loss_streaks)) / dec(len(loss_streaks)) if loss_streaks else dec(0)
     return max_wins, max_losses, avg_loss_streak
 
 
@@ -174,7 +173,7 @@ def _risk_adjusted(
         return None, None, None
     equities = [to_float(pt.equity) for pt in curve]
     returns: list[float] = []
-    for prev, cur in zip(equities, equities[1:], strict=False):
+    for prev, cur in itertools.pairwise(equities):
         if prev > 0:
             returns.append((cur - prev) / prev)
     if len(returns) < 2:
@@ -212,10 +211,7 @@ def _median_holding(trades: list[ClosedTrade]) -> float:
         return 0.0
     spans = sorted((t.exit_time - t.entry_time).total_seconds() for t in trades)
     mid = len(spans) // 2
-    if len(spans) % 2:
-        val = spans[mid]
-    else:
-        val = (spans[mid - 1] + spans[mid]) / 2
+    val = spans[mid] if len(spans) % 2 else (spans[mid - 1] + spans[mid]) / 2
     return round(val / 60.0, 2)
 
 

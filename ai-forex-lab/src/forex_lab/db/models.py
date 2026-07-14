@@ -9,7 +9,6 @@ append-only by convention (no update/delete paths in the application).
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
@@ -73,9 +72,7 @@ class SymbolMapping(Base):
     instrument_name: Mapped[str] = mapped_column(String(32))
     provider_symbol: Mapped[str] = mapped_column(String(64))  # AUDCAD.a, AUDCADm ...
 
-    __table_args__ = (
-        UniqueConstraint("provider_id", "instrument_name", name="uq_symbol_map"),
-    )
+    __table_args__ = (UniqueConstraint("provider_id", "instrument_name", name="uq_symbol_map"),)
 
 
 class Dataset(Base):
@@ -189,9 +186,7 @@ class StrategyVersion(Base):
 
     strategy: Mapped[Strategy] = relationship(back_populates="versions")
 
-    __table_args__ = (
-        UniqueConstraint("strategy_key", "semver", name="uq_strategy_version"),
-    )
+    __table_args__ = (UniqueConstraint("strategy_key", "semver", name="uq_strategy_version"),)
 
 
 class BacktestRun(Base):
@@ -227,9 +222,7 @@ class BacktestResult(Base):
 
     id: Mapped[bigint_pk]
     run_id: Mapped[int] = mapped_column(ForeignKey("backtest_runs.id"))
-    split_id: Mapped[int | None] = mapped_column(
-        ForeignKey("backtest_splits.id"), nullable=True
-    )
+    split_id: Mapped[int | None] = mapped_column(ForeignKey("backtest_splits.id"), nullable=True)
     dataset_id: Mapped[int] = mapped_column(ForeignKey("datasets.id"))
     strategy_version_id: Mapped[int] = mapped_column(ForeignKey("strategy_versions.id"))
     config_hash: Mapped[str] = mapped_column(String(64))

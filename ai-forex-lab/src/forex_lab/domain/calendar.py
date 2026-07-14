@@ -13,7 +13,7 @@ behavior is deterministic and explicit.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timezone
+from datetime import UTC, date, datetime, time
 
 from .enums import Session
 
@@ -29,7 +29,7 @@ _CLOSE_HOUR_FRIDAY = 22
 class HolidayCalendar:
     """Interface for market holidays. Default has none."""
 
-    def is_holiday(self, day: date) -> bool:  # noqa: D401 - interface
+    def is_holiday(self, day: date) -> bool:
         return False
 
 
@@ -47,7 +47,7 @@ class SessionRules:
 def _to_utc(ts: datetime) -> datetime:
     if ts.tzinfo is None:
         raise ValueError("timestamp must be timezone-aware")
-    return ts.astimezone(timezone.utc)
+    return ts.astimezone(UTC)
 
 
 def is_market_open(ts: datetime, rules: SessionRules | None = None) -> bool:

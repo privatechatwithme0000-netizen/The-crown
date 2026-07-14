@@ -14,7 +14,7 @@ Expected CSV columns (header required):
 from __future__ import annotations
 
 import csv
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -59,7 +59,7 @@ class CsvProvider:
             for row in reader:
                 ts = datetime.fromisoformat(row["timestamp"])
                 if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=timezone.utc)
+                    ts = ts.replace(tzinfo=UTC)
                 complete = row.get("complete", "true").strip().lower() != "false"
                 rows.append(
                     Candle.from_bid_ask(

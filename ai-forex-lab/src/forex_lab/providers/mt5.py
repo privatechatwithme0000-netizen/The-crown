@@ -9,7 +9,7 @@ gracefully and reports itself unhealthy rather than crashing on import.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from forex_lab.domain.candle import Candle
@@ -19,11 +19,11 @@ from forex_lab.domain.errors import ProviderUnavailableError, SymbolNotFoundErro
 from .base import LatestPrice, ProviderHealth, RateLimitStatus
 
 try:  # pragma: no cover - platform dependent
-    import MetaTrader5 as mt5  # type: ignore[import-not-found]
+    import MetaTrader5 as mt5  # noqa: N813
 
     _MT5_AVAILABLE = True
-except Exception:  # noqa: BLE001 - any import/platform failure means unavailable
-    mt5 = None  # type: ignore[assignment]
+except Exception:
+    mt5 = None
     _MT5_AVAILABLE = False
 
 # Default candidate suffixes brokers use for the same underlying pair.
@@ -107,7 +107,7 @@ class Mt5Provider:
             raise ProviderUnavailableError(f"MT5 returned no rates for {symbol}")
         out: list[Candle] = []
         for r in rates:
-            ts = datetime.fromtimestamp(int(r["time"]), tz=timezone.utc)
+            ts = datetime.fromtimestamp(int(r["time"]), tz=UTC)
             # MT5 rates are typically mid/bid; spread field is in points.
             spread_pts = Decimal(int(r["spread"]))
             point = Decimal(str(mt5.symbol_info(symbol).point))
@@ -145,7 +145,7 @@ class Mt5Provider:
             Timeframe.H4: mt5.TIMEFRAME_H4,
             Timeframe.D1: mt5.TIMEFRAME_D1,
         }
-        return mapping[timeframe]
+        return int(mapping[timeframe])
 
     def get_latest_price(self, instrument: str) -> LatestPrice:  # pragma: no cover
         if not _MT5_AVAILABLE:
@@ -156,7 +156,7 @@ class Mt5Provider:
             raise ProviderUnavailableError(f"no tick for {symbol}")
         return LatestPrice(
             instrument=instrument,
-            timestamp=datetime.fromtimestamp(int(tick.time), tz=timezone.utc),
+            timestamp=datetime.fromtimestamp(int(tick.time), tz=UTC),
             bid=Decimal(str(tick.bid)),
             ask=Decimal(str(tick.ask)),
         )

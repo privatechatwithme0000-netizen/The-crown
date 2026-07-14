@@ -97,9 +97,7 @@ class RiskGuard:
         # --- drawdown / loss halts -----------------------------------------
         drawdown = _drawdown(state.equity, state.peak_equity)
         if drawdown >= cfg.max_drawdown:
-            return _reject(
-                RiskRejectionReason.MAX_DRAWDOWN_REACHED, drawdown=str(drawdown)
-            )
+            return _reject(RiskRejectionReason.MAX_DRAWDOWN_REACHED, drawdown=str(drawdown))
         if _loss_fraction(state.daily_pnl, state.peak_equity) >= cfg.daily_loss_limit:
             return _reject(RiskRejectionReason.DAILY_LOSS_LIMIT_REACHED)
         if _loss_fraction(state.weekly_pnl, state.peak_equity) >= cfg.weekly_loss_limit:
@@ -122,10 +120,10 @@ class RiskGuard:
         # --- spread / stop distance ----------------------------------------
         spread_pips = request.spread / request.instrument.pip_size
         if spread_pips > cfg.max_spread_pips:
-            return _reject(
-                RiskRejectionReason.SPREAD_TOO_WIDE, spread_pips=str(spread_pips)
-            )
-        stop_pips = (request.entry_price - request.stop_price).copy_abs() / request.instrument.pip_size
+            return _reject(RiskRejectionReason.SPREAD_TOO_WIDE, spread_pips=str(spread_pips))
+        stop_pips = (
+            request.entry_price - request.stop_price
+        ).copy_abs() / request.instrument.pip_size
         if stop_pips < cfg.min_stop_distance_pips:
             return _reject(RiskRejectionReason.STOP_TOO_TIGHT, stop_pips=str(stop_pips))
         if stop_pips > cfg.max_stop_distance_pips:

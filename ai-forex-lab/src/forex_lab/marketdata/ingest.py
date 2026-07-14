@@ -9,7 +9,7 @@ tied to one provider.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +34,7 @@ class IngestionReport:
 
 
 def _now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 async def _audit(
@@ -63,9 +63,7 @@ async def ingest_candles(
     price_component: PriceComponent = PriceComponent.BID_ASK,
 ) -> IngestionReport:
     """Fetch and persist candles into a single pinned dataset."""
-    result: FetchResult = registry.fetch_candles(
-        instrument, timeframe, start, end, price_component
-    )
+    result: FetchResult = registry.fetch_candles(instrument, timeframe, start, end, price_component)
     spec = result.spec
 
     if result.used_failover:
@@ -167,9 +165,7 @@ async def ingest_candles(
     )
 
 
-async def load_candles_for_dataset(
-    session: AsyncSession, dataset_id: int
-) -> list[models.Candle]:
+async def load_candles_for_dataset(session: AsyncSession, dataset_id: int) -> list[models.Candle]:
     """Load all candles for a dataset, ordered chronologically."""
     rows = await session.execute(
         select(models.Candle)

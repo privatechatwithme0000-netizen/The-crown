@@ -69,10 +69,8 @@ class ProviderRegistry:
         errors: list[str] = []
         for index, provider in enumerate(self._providers):
             try:
-                candles = provider.get_candles(
-                    instrument, timeframe, start, end, price_component
-                )
-            except Exception as exc:  # noqa: BLE001 - any provider failure -> failover
+                candles = provider.get_candles(instrument, timeframe, start, end, price_component)
+            except Exception as exc:
                 errors.append(f"{provider.name}: {exc}")
                 continue
             used_failover = index > 0

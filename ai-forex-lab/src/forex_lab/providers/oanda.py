@@ -11,7 +11,7 @@ sub-objects when requested with ``price=BAM``.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
@@ -97,8 +97,8 @@ class OandaProvider:
             raise ProviderUnavailableError("OANDA token not configured")
         params = {
             "granularity": _GRANULARITY[timeframe],
-            "from": start.astimezone(timezone.utc).isoformat(),
-            "to": end.astimezone(timezone.utc).isoformat(),
+            "from": start.astimezone(UTC).isoformat(),
+            "to": end.astimezone(UTC).isoformat(),
             "price": "BA",  # bid + ask; mid is derived
             "includeFirst": "true",
         }
@@ -170,9 +170,7 @@ class OandaProvider:
             return ProviderHealth(name=self.name, healthy=False, detail="not configured")
         client = self._http()
         try:
-            resp = client.get(
-                f"/v3/accounts/{self._account_id}/summary", headers=self._headers()
-            )
+            resp = client.get(f"/v3/accounts/{self._account_id}/summary", headers=self._headers())
             healthy = resp.status_code == 200
             return ProviderHealth(
                 name=self.name, healthy=healthy, detail=f"status={resp.status_code}"

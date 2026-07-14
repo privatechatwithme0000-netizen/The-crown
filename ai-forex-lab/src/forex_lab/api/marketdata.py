@@ -57,9 +57,15 @@ async def start_ingestion(
     registry = build_registry()
     try:
         report = await ingest_candles(
-            session, registry, req.instrument, req.timeframe, req.start, req.end, req.price_component
+            session,
+            registry,
+            req.instrument,
+            req.timeframe,
+            req.start,
+            req.end,
+            req.price_component,
         )
-    except Exception as exc:  # noqa: BLE001 - surface provider errors to client
+    except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {
         "dataset_id": report.dataset_id,
@@ -73,7 +79,11 @@ async def start_ingestion(
 
 @router.get("/datasets")
 async def list_datasets(session: AsyncSession = Depends(db_session)) -> dict[str, Any]:
-    rows = (await session.execute(select(models.Dataset).order_by(models.Dataset.id.desc()))).scalars().all()
+    rows = (
+        (await session.execute(select(models.Dataset).order_by(models.Dataset.id.desc())))
+        .scalars()
+        .all()
+    )
     return {
         "datasets": [
             {
@@ -100,13 +110,17 @@ async def get_candles(
     session: AsyncSession = Depends(db_session),
 ) -> dict[str, Any]:
     rows = (
-        await session.execute(
-            select(models.Candle)
-            .where(models.Candle.dataset_id == dataset_id)
-            .order_by(models.Candle.timestamp)
-            .limit(limit)
+        (
+            await session.execute(
+                select(models.Candle)
+                .where(models.Candle.dataset_id == dataset_id)
+                .order_by(models.Candle.timestamp)
+                .limit(limit)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return {
         "dataset_id": dataset_id,
         "candles": [
@@ -126,14 +140,16 @@ async def get_candles(
 
 
 @router.get("/datasets/{dataset_id}/gaps")
-async def get_gaps(
-    dataset_id: int, session: AsyncSession = Depends(db_session)
-) -> dict[str, Any]:
+async def get_gaps(dataset_id: int, session: AsyncSession = Depends(db_session)) -> dict[str, Any]:
     rows = (
-        await session.execute(
-            select(models.DataGap).where(models.DataGap.dataset_id == dataset_id)
+        (
+            await session.execute(
+                select(models.DataGap).where(models.DataGap.dataset_id == dataset_id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return {
         "dataset_id": dataset_id,
         "gaps": [

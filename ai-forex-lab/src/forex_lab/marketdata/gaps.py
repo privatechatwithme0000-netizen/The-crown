@@ -7,6 +7,7 @@ expected weekend closure (Friday close -> Sunday open).
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -38,7 +39,7 @@ def detect_gaps(candles: Sequence[Candle], timeframe: Timeframe) -> list[Gap]:
     step = timedelta(seconds=timeframe.seconds)
     gaps: list[Gap] = []
     ordered = sorted(candles, key=lambda c: c.timestamp)
-    for prev, nxt in zip(ordered, ordered[1:], strict=False):
+    for prev, nxt in itertools.pairwise(ordered):
         delta = nxt.timestamp - prev.timestamp
         if delta <= step:
             continue

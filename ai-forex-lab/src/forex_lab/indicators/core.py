@@ -135,9 +135,7 @@ def bollinger(
     variance = sum(((v - mid) ** 2 for v in window), Decimal(0)) / dec(period)
     std = variance.sqrt()
     k = dec(num_std)
-    return BollingerValue(
-        middle=mid, upper=mid + k * std, lower=mid - k * std, stddev=std
-    )
+    return BollingerValue(middle=mid, upper=mid + k * std, lower=mid - k * std, stddev=std)
 
 
 def true_range(candles: Sequence[Candle], price: str = "mid") -> list[Decimal]:
@@ -153,9 +151,7 @@ def true_range(candles: Sequence[Candle], price: str = "mid") -> list[Decimal]:
         if prev_close is None:
             out.append(high - low)
         else:
-            out.append(
-                max(high - low, abs(high - prev_close), abs(low - prev_close))
-            )
+            out.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
         prev_close = getattr(c, cl)
     return out
 

@@ -9,7 +9,7 @@ rates. Every fill records its full cost breakdown.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
@@ -19,8 +19,8 @@ from forex_lab.domain.instruments import Instrument
 from forex_lab.domain.money import dec, quantize_money
 from forex_lab.execution.costs import (
     CommissionModel,
-    FinancingModel,
     FillPrice,
+    FinancingModel,
     SlippageModel,
     compute_fill_price,
 )
@@ -146,7 +146,12 @@ class PaperBroker:
             return dec(0)
         # Long marked at bid (exit price), short marked at ask.
         mark = bid if pos.side is Side.BUY else ask
-        pnl_quote = (mark - pos.entry_price) * pos.quantity * dec(pos.side.sign) * self._instrument.contract_size
+        pnl_quote = (
+            (mark - pos.entry_price)
+            * pos.quantity
+            * dec(pos.side.sign)
+            * self._instrument.contract_size
+        )
         return self._quote_to_home(pnl_quote)
 
     def equity(self, bid: Decimal, ask: Decimal) -> Decimal:
@@ -173,8 +178,8 @@ class PaperBroker:
         ask_open: Decimal,
         atr: Decimal | None,
         timestamp: datetime,
-        stop_price: Decimal | None,
-        target_price: Decimal | None,
+        stop_distance: Decimal | None = None,
+        target_distance: Decimal | None = None,
         reason: str = "ENTRY",
     ) -> FillRecord:
         if self._position is not None:
@@ -190,13 +195,19 @@ class PaperBroker:
         )
         reference = ask_open if side is Side.BUY else bid_open
         notional_quote = quantity * fp.price * self._instrument.contract_size
-        commission = self._quote_to_home(
-            self._commission.charge(quantity, notional_quote)
-        )
+        commission = self._quote_to_home(self._commission.charge(quantity, notional_quote))
         self._cash -= commission
         spread_cost = self._quote_to_home(
             (ask_open - bid_open) * quantity * self._instrument.contract_size / dec(2)
         )
+        # Derive stop/target levels from the actual fill price and the distances.
+        long = side is Side.BUY
+        stop_price = None
+        if stop_distance is not None:
+            stop_price = fp.price - stop_distance if long else fp.price + stop_distance
+        target_price = None
+        if target_distance is not None:
+            target_price = fp.price + target_distance if long else fp.price - target_distance
         self._position = OpenPosition(
             side=side,
             quantity=quantity,
@@ -256,9 +267,7 @@ class PaperBroker:
             slippage = fp.slippage
 
         notional_quote = pos.quantity * exit_price * self._instrument.contract_size
-        exit_commission = self._quote_to_home(
-            self._commission.charge(pos.quantity, notional_quote)
-        )
+        exit_commission = self._quote_to_home(self._commission.charge(pos.quantity, notional_quote))
         gross_quote = (
             (exit_price - pos.entry_price)
             * pos.quantity
@@ -325,9 +334,7 @@ class PaperBroker:
         if pos is None:
             return dec(0)
         notional_quote = pos.quantity * pos.entry_price * self._instrument.contract_size
-        charge = self._quote_to_home(
-            self._financing.overnight_charge(pos.side, notional_quote)
-        )
+        charge = self._quote_to_home(self._financing.overnight_charge(pos.side, notional_quote))
         pos.financing_accrued += charge
         self._cash -= charge
         return charge

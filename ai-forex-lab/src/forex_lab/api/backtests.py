@@ -13,8 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from forex_lab.api.deps import db_session
 from forex_lab.backtest.config import BacktestConfig
-from forex_lab.backtest.persistence import load_domain_candles, run_and_persist
 from forex_lab.backtest.engine import Backtester
+from forex_lab.backtest.persistence import load_domain_candles, run_and_persist
 from forex_lab.baselines import available_baselines, get_baseline_class
 from forex_lab.db import models
 from forex_lab.domain.enums import ExecutionMode, Timeframe
@@ -70,7 +70,7 @@ async def start_backtest(
         run_id, metrics = await run_and_persist(
             session, dataset_id=req.dataset_id, strategy=strategy, config=config
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"run_id": run_id, "status": "COMPLETED", "metrics": metrics}
 
@@ -94,8 +94,10 @@ async def get_status(run_id: int, session: AsyncSession = Depends(db_session)) -
 @router.get("/{run_id}/trades")
 async def get_trades(run_id: int, session: AsyncSession = Depends(db_session)) -> dict[str, Any]:
     rows = (
-        await session.execute(select(models.Trade).where(models.Trade.run_id == run_id))
-    ).scalars().all()
+        (await session.execute(select(models.Trade).where(models.Trade.run_id == run_id)))
+        .scalars()
+        .all()
+    )
     return {
         "run_id": run_id,
         "trades": [
@@ -119,8 +121,10 @@ async def get_trades(run_id: int, session: AsyncSession = Depends(db_session)) -
 @router.get("/{run_id}/signals")
 async def get_signals(run_id: int, session: AsyncSession = Depends(db_session)) -> dict[str, Any]:
     rows = (
-        await session.execute(select(models.Signal).where(models.Signal.run_id == run_id))
-    ).scalars().all()
+        (await session.execute(select(models.Signal).where(models.Signal.run_id == run_id)))
+        .scalars()
+        .all()
+    )
     return {
         "run_id": run_id,
         "signals": [
@@ -136,15 +140,21 @@ async def get_signals(run_id: int, session: AsyncSession = Depends(db_session)) 
 
 
 @router.get("/{run_id}/rejections")
-async def get_rejections(run_id: int, session: AsyncSession = Depends(db_session)) -> dict[str, Any]:
+async def get_rejections(
+    run_id: int, session: AsyncSession = Depends(db_session)
+) -> dict[str, Any]:
     rows = (
-        await session.execute(
-            select(models.RiskDecision).where(
-                models.RiskDecision.run_id == run_id,
-                models.RiskDecision.outcome == "REJECTED",
+        (
+            await session.execute(
+                select(models.RiskDecision).where(
+                    models.RiskDecision.run_id == run_id,
+                    models.RiskDecision.outcome == "REJECTED",
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return {
         "run_id": run_id,
         "rejections": [
@@ -157,12 +167,16 @@ async def get_rejections(run_id: int, session: AsyncSession = Depends(db_session
 @router.get("/{run_id}/equity")
 async def get_equity(run_id: int, session: AsyncSession = Depends(db_session)) -> dict[str, Any]:
     rows = (
-        await session.execute(
-            select(models.EquitySnapshot)
-            .where(models.EquitySnapshot.run_id == run_id)
-            .order_by(models.EquitySnapshot.timestamp)
+        (
+            await session.execute(
+                select(models.EquitySnapshot)
+                .where(models.EquitySnapshot.run_id == run_id)
+                .order_by(models.EquitySnapshot.timestamp)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return {
         "run_id": run_id,
         "equity_curve": [

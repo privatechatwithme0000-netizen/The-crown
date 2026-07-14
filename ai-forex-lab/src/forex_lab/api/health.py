@@ -24,7 +24,7 @@ async def _postgres_ok() -> bool:
         async with session_scope() as session:
             await session.execute(text("SELECT 1"))
         return True
-    except Exception:  # noqa: BLE001 - readiness probe must not raise
+    except Exception:
         return False
 
 

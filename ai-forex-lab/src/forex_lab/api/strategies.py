@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -91,10 +91,16 @@ async def retire_version(
 @router.get("/graveyard")
 async def view_graveyard(session: AsyncSession = Depends(db_session)) -> dict[str, Any]:
     rows = (
-        await session.execute(
-            select(models.StrategyGraveyard).order_by(models.StrategyGraveyard.retired_at.desc())
+        (
+            await session.execute(
+                select(models.StrategyGraveyard).order_by(
+                    models.StrategyGraveyard.retired_at.desc()
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return {
         "graveyard": [
             {
@@ -137,7 +143,7 @@ async def add_to_graveyard(
         failure_reason=req.failure_reason,
         eligibility_failures=req.eligibility_failures,
         notes=req.notes,
-        retired_at=datetime.now(tz=timezone.utc),
+        retired_at=datetime.now(tz=UTC),
     )
     session.add(entry)
     await session.flush()

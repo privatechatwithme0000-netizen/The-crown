@@ -36,7 +36,7 @@ class Instrument:
 
     def pips_from_price_delta(self, delta: Decimal) -> Decimal:
         """Convert an absolute price difference into pips."""
-        return (abs(delta) / self.pip_size)
+        return abs(delta) / self.pip_size
 
 
 def _make(

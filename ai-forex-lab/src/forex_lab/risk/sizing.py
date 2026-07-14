@@ -84,9 +84,7 @@ def size_position(
 
     stop_distance = (entry_price - stop_price).copy_abs()
     if stop_distance <= 0:
-        raise SizingError(
-            RiskRejectionReason.STOP_TOO_TIGHT, "stop distance must be positive"
-        )
+        raise SizingError(RiskRejectionReason.STOP_TOO_TIGHT, "stop distance must be positive")
     stop_pips = stop_distance / instrument.pip_size
 
     # Loss per unit is expressed in the QUOTE currency.

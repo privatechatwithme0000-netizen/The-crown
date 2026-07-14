@@ -63,7 +63,7 @@ async def start_oanda_practice(req: StartSessionRequest) -> dict[str, Any]:
 @router.post("/{session_id}/stop")
 async def stop_session(session_id: str) -> dict[str, Any]:
     state = await get_json(paper_session_key(session_id))
-    if state is None:
+    if not isinstance(state, dict):
         raise HTTPException(status_code=404, detail="session not found")
     state["status"] = "STOPPED"
     await set_json(paper_session_key(session_id), state)
@@ -73,6 +73,6 @@ async def stop_session(session_id: str) -> dict[str, Any]:
 @router.get("/{session_id}")
 async def session_status(session_id: str) -> dict[str, Any]:
     state = await get_json(paper_session_key(session_id))
-    if state is None:
+    if not isinstance(state, dict):
         raise HTTPException(status_code=404, detail="session not found")
     return state

@@ -21,12 +21,13 @@ open. Fills never read bar t's high/low/close — only its open.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 from forex_lab.agents.decision_engine import DecisionEngine
 from forex_lab.agents.market_analyst import MarketAnalystAgent
+from forex_lab.broker.paper_broker import ClosedTrade, FillRecord, PaperBroker
 from forex_lab.domain.candle import Candle
 from forex_lab.domain.enums import (
     AuditEventType,
@@ -40,7 +41,6 @@ from forex_lab.indicators import atr
 from forex_lab.marketdata.causal_view import CausalView
 from forex_lab.risk.guard import RiskGuard, RiskRequest, RiskState
 from forex_lab.strategies.base import Strategy, StrategySignal
-from forex_lab.broker.paper_broker import ClosedTrade, FillRecord, PaperBroker
 
 from .config import BacktestConfig, IntrabarTieBreak
 
@@ -167,9 +167,7 @@ class Backtester:
             if broker.position is not None:
                 trade = self._check_stop_target(broker, bar, cfg, outcome)
                 if trade is not None:
-                    consecutive_losses = (
-                        consecutive_losses + 1 if trade.net_pnl < 0 else 0
-                    )
+                    consecutive_losses = consecutive_losses + 1 if trade.net_pnl < 0 else 0
                     if consecutive_losses >= cfg.risk.consecutive_loss_limit:
                         cooldown_trigger_bar = i
 
@@ -300,37 +298,25 @@ class Backtester:
                 timestamp=bar.timestamp,
                 reason="SIGNAL_CLOSE",
             )
-            outcome.audit.append(AuditEvent(bar.timestamp, AuditEventType.FILL.value, {"kind": "close"}))
+            outcome.audit.append(
+                AuditEvent(bar.timestamp, AuditEventType.FILL.value, {"kind": "close"})
+            )
             return
         if pending.action in (SignalAction.BUY, SignalAction.SELL) and broker.position is None:
             if pending.quantity is None:
                 return
             side = Side.BUY if pending.action is SignalAction.BUY else Side.SELL
-            # fill price at open, then derive stop/target from actual fill
-            record = broker.open_position(
+            # Stop/target levels are derived by the broker from the actual fill.
+            broker.open_position(
                 side=side,
                 quantity=pending.quantity,
                 bid_open=bar.bid_open,
                 ask_open=bar.ask_open,
                 atr=pending.atr_at_decision,
                 timestamp=bar.timestamp,
-                stop_price=None,
-                target_price=None,
+                stop_distance=pending.stop_distance,
+                target_distance=pending.target_distance,
             )
-            pos = broker.position
-            assert pos is not None
-            if pending.stop_distance is not None:
-                pos.stop_price = (
-                    record.fill_price - pending.stop_distance
-                    if side is Side.BUY
-                    else record.fill_price + pending.stop_distance
-                )
-            if pending.target_distance is not None:
-                pos.target_price = (
-                    record.fill_price + pending.target_distance
-                    if side is Side.BUY
-                    else record.fill_price - pending.target_distance
-                )
             outcome.audit.append(
                 AuditEvent(
                     bar.timestamp,
@@ -338,7 +324,9 @@ class Backtester:
                     {"side": side.value, "quantity": str(pending.quantity)},
                 )
             )
-            outcome.audit.append(AuditEvent(bar.timestamp, AuditEventType.FILL.value, {"kind": "entry"}))
+            outcome.audit.append(
+                AuditEvent(bar.timestamp, AuditEventType.FILL.value, {"kind": "entry"})
+            )
 
     def _check_stop_target(
         self,
@@ -414,17 +402,12 @@ class Backtester:
             exposure=broker.exposure_units(),
         )
 
-    def _evaluate_risk(
-        self, *, signal: StrategySignal, bar: Candle, state: RiskState
-    ):  # type: ignore[no-untyped-def]
+    def _evaluate_risk(self, *, signal: StrategySignal, bar: Candle, state: RiskState):  # type: ignore[no-untyped-def]
         # Estimate entry/stop from the current bar close and the suggested stop
         # distance (a causal reference; the actual fill is next-bar open).
         ref = bar.mid_close
         distance = signal.suggested_stop_distance or (self._instrument.pip_size * dec(20))
-        if signal.action is SignalAction.BUY:
-            stop_price = ref - distance
-        else:
-            stop_price = ref + distance
+        stop_price = ref - distance if signal.action is SignalAction.BUY else ref + distance
         request = RiskRequest(
             action=signal.action,
             instrument=self._instrument,
@@ -461,6 +444,5 @@ def _to_risk_event(ts: datetime, d: Any) -> RiskEvent:
 
 
 def _epoch() -> datetime:
-    from datetime import timezone
 
-    return datetime(1970, 1, 1, tzinfo=timezone.utc)
+    return datetime(1970, 1, 1, tzinfo=UTC)

@@ -109,16 +109,20 @@ def evaluate_eligibility(
                 if _to_dec(oos_pf) < threshold:
                     failures.append(f"OOS_DEGRADATION:{oos_pf}<{threshold}")
 
-    if ctx.walk_forward_stability is not None:
-        if ctx.walk_forward_stability < config.min_walk_forward_stability:
-            failures.append(
-                f"WF_STABILITY:{ctx.walk_forward_stability}<{config.min_walk_forward_stability}"
-            )
+    if (
+        ctx.walk_forward_stability is not None
+        and ctx.walk_forward_stability < config.min_walk_forward_stability
+    ):
+        failures.append(
+            f"WF_STABILITY:{ctx.walk_forward_stability}<{config.min_walk_forward_stability}"
+        )
 
     return failures
 
 
-def score_strategy(metrics: dict[str, Any], config: RankingConfig, context: RankingContext) -> tuple[Decimal, dict[str, Any]]:
+def score_strategy(
+    metrics: dict[str, Any], config: RankingConfig, context: RankingContext
+) -> tuple[Decimal, dict[str, Any]]:
     net_return = _to_dec(metrics.get("net_return"))
     pf = _to_dec(metrics.get("profit_factor"), dec(0))
     expectancy = _to_dec(metrics.get("expectancy"))
