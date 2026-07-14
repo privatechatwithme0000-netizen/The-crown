@@ -19,10 +19,14 @@ strategies/    versioned Strategy base + trend/mean-reversion/momentum/breakout
 baselines/     buy-and-hold, no-trade, deterministic seeded random
 agents/        market analyst, risk agent, decision engine (deterministic)
 risk/          position sizing (currency conversion) + RiskGuard + RiskConfig
-execution/     cost model: bid/ask fills, slippage, commission, financing
+execution/     cost model (bid/ask fills, slippage, commission, financing) +
+               execution adapters (internal no-op, OANDA practice-only)
 broker/        deterministic paper broker (cash/margin/equity/P&L)
-backtest/      event-driven engine, config+hashing, chronological splits,
-               walk-forward, DB persistence
+backtest/      shared per-bar runtime (BarProcessor) used by both the
+               historical engine and live sessions, config+hashing,
+               chronological splits, walk-forward orchestration, DB persistence
+live/          real-time paper-trading session (streams candles through the
+               same deterministic runtime; proven bit-identical to backtest)
 metrics/       timeframe-aware metrics
 ranking/       eligibility gates + scoring + graveyard
 commentary/    read-only LLM layer (cannot trade)

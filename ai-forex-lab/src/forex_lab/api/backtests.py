@@ -15,6 +15,7 @@ from forex_lab.api.deps import db_session
 from forex_lab.backtest.config import BacktestConfig
 from forex_lab.backtest.engine import Backtester
 from forex_lab.backtest.persistence import load_domain_candles, run_and_persist
+from forex_lab.backtest.walkforward import run_walk_forward
 from forex_lab.baselines import available_baselines, get_baseline_class
 from forex_lab.db import models
 from forex_lab.domain.enums import ExecutionMode, Timeframe
@@ -231,3 +232,89 @@ async def compare_baselines(
         m = compute_metrics(outcome, timeframe, config.initial_cash).values
         results[key] = {"num_trades": m["num_trades"], "net_pnl": m["net_pnl"]}
     return {"run_id": run_id, "baselines": results}
+
+
+@router.get("/{run_id}/commentary")
+async def get_commentary(
+    run_id: int, session: AsyncSession = Depends(db_session)
+) -> dict[str, Any]:
+    rows = (
+        (
+            await session.execute(
+                select(models.Commentary)
+                .where(models.Commentary.run_id == run_id)
+                .order_by(models.Commentary.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "run_id": run_id,
+        "commentary": [
+            {"subject": c.subject, "model": c.model, "content": c.content} for c in rows
+        ],
+    }
+
+
+class WalkForwardRequest(BaseModel):
+    dataset_id: int
+    strategy_key: str
+    parameters: dict[str, Any] = {}
+    account_currency: str = "USD"
+    initial_cash: str = "10000"
+    seed: int = 12345
+    conversions: dict[str, str] = {}
+    train_size: int = 500
+    test_size: int = 200
+    step: int | None = None
+
+
+@router.post("/walk-forward")
+async def walk_forward(
+    req: WalkForwardRequest, session: AsyncSession = Depends(db_session)
+) -> dict[str, Any]:
+    try:
+        cls = get_strategy_class(req.strategy_key)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    timeframe = await _dataset_timeframe(session, req.dataset_id)
+    candles = await load_domain_candles(session, req.dataset_id)
+    if not candles:
+        raise HTTPException(status_code=400, detail="dataset has no candles")
+    config = BacktestConfig(
+        instrument="AUD_CAD",
+        timeframe=timeframe,
+        account_currency=req.account_currency,
+        initial_cash=Decimal(req.initial_cash),
+        seed=req.seed,
+        conversions=ConversionRates({k: Decimal(v) for k, v in req.conversions.items()}),
+    )
+    try:
+        report = run_walk_forward(
+            candles=candles,
+            strategy_factory=cls,
+            parameters=req.parameters,
+            config=config,
+            train_size=req.train_size,
+            test_size=req.test_size,
+            step=req.step,
+            timeframe=timeframe,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "num_windows": report.num_windows,
+        "stability": str(report.stability),
+        "mean_net_pnl": str(report.mean_net_pnl),
+        "windows": [
+            {
+                "index": w.index,
+                "train": [w.train_start, w.train_end],
+                "test": [w.test_start, w.test_end],
+                "net_pnl": w.metrics["net_pnl"],
+                "num_trades": w.metrics["num_trades"],
+            }
+            for w in report.windows
+        ],
+    }

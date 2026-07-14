@@ -24,6 +24,8 @@ def test_app_builds_and_lists_routes() -> None:
     assert "/health/ready" in paths
     assert "/backtests/run" in paths
     assert "/marketdata/ingest" in paths
+    assert "/backtests/walk-forward" in paths
+    assert "/rankings/leaderboard" in paths
 
 
 def test_live_execution_guard_blocks_startup(monkeypatch: pytest.MonkeyPatch) -> None:

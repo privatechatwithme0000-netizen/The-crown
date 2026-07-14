@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from forex_lab.api import backtests, health, marketdata, paper, strategies
+from forex_lab.api import backtests, health, marketdata, paper, rankings, strategies
 from forex_lab.cache.redis_client import close_redis
 from forex_lab.config import get_settings
 from forex_lab.db.session import dispose_engine, init_engine
@@ -48,6 +48,7 @@ def create_app() -> FastAPI:
     app.include_router(marketdata.router)
     app.include_router(strategies.router)
     app.include_router(backtests.router)
+    app.include_router(rankings.router)
     app.include_router(paper.router)
 
     @app.get("/", tags=["root"])

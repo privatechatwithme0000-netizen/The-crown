@@ -28,6 +28,15 @@ class CausalView:
         self._candles: tuple[Candle, ...] = tuple(candles)
         self._cursor: int = -1
 
+    def append(self, candle: Candle) -> None:
+        """Append a newly-arrived completed candle (live streaming use).
+
+        Backtests build the series once and never call this, preserving their
+        immutability. Live sessions append each completed bar as it arrives; the
+        cursor is unchanged so the caller still advances explicitly.
+        """
+        self._candles = (*self._candles, candle)
+
     def __len__(self) -> int:
         """Number of candles visible now (cursor + 1)."""
         return self._cursor + 1

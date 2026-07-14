@@ -13,10 +13,12 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from forex_lab.commentary import DeterministicCommentary, build_read_only_result
 from forex_lab.db import models
 from forex_lab.domain.candle import Candle
 from forex_lab.domain.enums import Timeframe
 from forex_lab.metrics import compute_metrics
+from forex_lab.ranking import RankingConfig, build_graveyard_entry, rank_strategy
 from forex_lab.strategies.base import Strategy
 
 from .config import BacktestConfig
@@ -127,6 +129,9 @@ async def run_and_persist(
         outcome = Backtester(strategy=strategy, config=config).run(candles)
         metrics = compute_metrics(outcome, config.timeframe, config.initial_cash).values
         await _persist_outcome(session, run, version.id, dataset_id, config, outcome, metrics)
+        await _persist_ranking_and_commentary(
+            session, run, version, dataset_id, strategy, metrics
+        )
         run.status = "COMPLETED"
         run.finished_at = _now()
     except Exception as exc:
@@ -284,4 +289,81 @@ async def _persist_outcome(
     )
     session.add(
         models.MetricsReport(run_id=run.id, split_kind="FULL", metrics=metrics, created_at=_now())
+    )
+
+
+async def _persist_ranking_and_commentary(
+    session: AsyncSession,
+    run: models.BacktestRun,
+    version: models.StrategyVersion,
+    dataset_id: int,
+    strategy: Strategy,
+    metrics: dict[str, object],
+) -> None:
+    """Auto-rank the run, retire failures to the graveyard, and store commentary.
+
+    Eligibility gates decide whether the strategy version receives a score
+    (eligible) or is marked NOT_ELIGIBLE. A strategy that fails its gates is
+    also recorded in the Strategy Graveyard so the same idea is not repeated.
+    Commentary is generated deterministically from a read-only result snapshot;
+    it never influences the trade record.
+    """
+    result = rank_strategy(metrics, RankingConfig())
+    session.add(
+        models.StrategyRanking(
+            strategy_version_id=version.id,
+            run_id=run.id,
+            eligible=result.eligible,
+            score=result.score,
+            eligibility_failures=result.failures,
+            score_breakdown=result.breakdown,
+            created_at=_now(),
+        )
+    )
+
+    if not result.eligible:
+        entry = build_graveyard_entry(
+            strategy_key=strategy.key,
+            semver=strategy.semver,
+            parameters=strategy.parameters,
+            source_hash=strategy.source_hash(),
+            metrics=metrics,
+            failure_reason="failed eligibility gates",
+            eligibility_failures=result.failures,
+            dataset_id=dataset_id,
+        )
+        session.add(
+            models.StrategyGraveyard(
+                strategy_key=entry.strategy_key,
+                semver=entry.semver,
+                parameters=entry.parameters,
+                source_hash=entry.source_hash,
+                dataset_id=entry.dataset_id,
+                metrics=entry.metrics,
+                max_drawdown=entry.max_drawdown,
+                max_consecutive_losses=entry.max_consecutive_losses,
+                failure_reason=entry.failure_reason,
+                eligibility_failures=entry.eligibility_failures,
+                notes=entry.notes,
+                retired_at=_now(),
+            )
+        )
+
+    read_only = build_read_only_result(
+        strategy_key=strategy.key,
+        semver=strategy.semver,
+        instrument=str(metrics.get("instrument", "AUD_CAD")),
+        timeframe="M15",
+        metrics=metrics,
+        eligible=result.eligible,
+    )
+    commentary_text = DeterministicCommentary().generate(read_only)
+    session.add(
+        models.Commentary(
+            run_id=run.id,
+            subject="BACKTEST_SUMMARY",
+            content=commentary_text,
+            model="deterministic",
+            created_at=_now(),
+        )
     )
